@@ -27,7 +27,12 @@ export const StatsChart: React.FC<StatsChartProps> = ({ data }) => {
           
           <XAxis 
             dataKey="date" 
-            tickFormatter={(value) => value.slice(5)} // Show MM-DD
+            tickFormatter={(value) => {
+               if (!value) return '';
+               const parts = value.split('-');
+               if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
+               return value;
+            }}
             stroke="#9ca3af"
             tick={{ fill: '#9ca3af', fontSize: 12 }}
           />
@@ -52,6 +57,10 @@ export const StatsChart: React.FC<StatsChartProps> = ({ data }) => {
             contentStyle={{ backgroundColor: '#1A1C2A', borderColor: '#BC13FE', color: '#fff' }}
             itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
             labelStyle={{ color: '#00F0FF', marginBottom: '5px' }}
+            labelFormatter={(value) => {
+               const parts = value.split('-');
+               return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }}
           />
           
           <Legend wrapperStyle={{ paddingTop: '10px' }} />

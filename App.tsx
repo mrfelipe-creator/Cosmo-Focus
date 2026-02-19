@@ -1,9 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipForward, BarChart2, Flame, Settings, RotateCcw, Globe, X, Target, Clock, Maximize, Minimize } from 'lucide-react';
+import { Play, Pause, SkipForward, BarChart2, Flame, RotateCcw, Globe, X, Target, Clock, Maximize, Minimize } from 'lucide-react';
 import { Task, TimerMode, DailyStats, AppSettings } from './types';
 import { NeonButton } from './components/NeonButton';
 import { TaskList } from './components/TaskList';
 import { StatsChart } from './components/StatsChart';
+
+// Sound URLs
+const SOUNDS = {
+  alarm: 'https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg',
+  success: 'https://actions.google.com/sounds/v1/science_fiction/scifi_input_machine.ogg',
+  fail: 'https://actions.google.com/sounds/v1/science_fiction/scifi_drone_power_down.ogg'
+};
+
+const playSound = (type: keyof typeof SOUNDS) => {
+  const audio = new Audio(SOUNDS[type]);
+  audio.volume = 0.5;
+  const playPromise = audio.play();
+
+  if (playPromise !== undefined) {
+      playPromise.catch(e => console.log("Audio play failed", e));
+  }
+
+  // Requirement 1: Limit alarm sound to 5 seconds
+  if (type === 'alarm') {
+    setTimeout(() => {
+        audio.pause();
+        audio.currentTime = 0;
+    }, 5000);
+  }
+};
+
+// Helper function to get local date in YYYY-MM-DD format
+// This avoids UTC issues where late night in Brazil counts as next day
+const getToday = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // Default Settings
 const DEFAULT_SETTINGS: AppSettings = {
@@ -11,7 +46,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   breakTime: 5,
   dailyGoalPomos: 8,
   streak: 0,
-  lastActiveDate: new Date().toISOString().split('T')[0],
+  lastActiveDate: getToday(),
 };
 
 // --- Helper for LocalStorage ---
@@ -70,7 +105,7 @@ const App: React.FC = () => {
 
   // Check Streak on Load
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
     if (today !== settings.lastActiveDate) {
        setSettings(prev => ({ ...prev, lastActiveDate: today }));
     }
@@ -110,11 +145,10 @@ const App: React.FC = () => {
 
   const handleTimerComplete = () => {
     setIsActive(false);
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
 
-    // Play Sound
-    const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-    audio.play().catch(e => console.log("Audio play failed", e));
+    // Play Alarm Sound
+    playSound('alarm');
 
     if (mode === TimerMode.POMODORO) {
       // Update Task
@@ -157,6 +191,15 @@ const App: React.FC = () => {
   const toggleTimer = () => setIsActive(!isActive);
 
   const resetTimer = () => {
+    // Only play fail sound if timer was actually running or progressed
+    const currentTotal = mode === TimerMode.POMODORO 
+        ? (activeTaskId ? tasks.find(t => t.id === activeTaskId)?.durationPerPomo || settings.pomodoroTime : settings.pomodoroTime) * 60
+        : settings.breakTime * 60;
+    
+    if (isActive || timeLeft !== currentTotal) {
+        playSound('fail');
+    }
+    
     setIsActive(false);
     resetTimerToMode(mode);
   };
@@ -229,10 +272,14 @@ const App: React.FC = () => {
 
     const newCompletionState = !task.isCompleted;
     setTasks(tasks.map(t => t.id === id ? { ...t, isCompleted: newCompletionState } : t));
+    
+    if (newCompletionState) {
+        playSound('success');
+    }
 
     // Update Daily Stats for Completed Tasks
     // Note: We count the task as completed "today" when the checkbox is clicked.
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
     setDailyStats(prev => prev.map(day => {
       if (day.date === today) {
         return { 
@@ -260,11 +307,13 @@ const App: React.FC = () => {
   };
 
   // --- Data for Dashboard ---
-  const todayDateStr = new Date().toISOString().split('T')[0];
+  const todayDateStr = getToday();
   const todayStats = dailyStats.find(s => s.date === todayDateStr) || { pomodorosCompleted: 0, minutesFocused: 0, breaksTaken: 0, tasksCompleted: 0 };
   
-  // Calculate Task Count for Today (All tasks set for today, regardless of status)
-  const tasksCountToday = tasks.filter(t => t.date === todayDateStr).length;
+  // Calculate Task Counts for Today
+  const tasksForToday = tasks.filter(t => t.date === todayDateStr);
+  const tasksCountTotal = tasksForToday.length;
+  const tasksCountCompleted = tasksForToday.filter(t => t.isCompleted).length;
 
   // Calculate COMPLETED Minutes for Today
   // Logic: Sum of (estimated pomos * duration) for tasks that are completed and set for today.
@@ -277,17 +326,11 @@ const App: React.FC = () => {
       {/* Header / Logo */}
       <header className={`w-full max-w-4xl flex justify-between items-center mb-10 transition-opacity duration-300 ${isFullscreen ? 'opacity-0 pointer-events-none absolute' : 'opacity-100'}`}>
         <div className="flex items-center gap-4">
-           {/* Planet Neon Logo */}
-           <div className="relative w-12 h-12 flex items-center justify-center">
-              <Globe className="text-neon-cyan w-full h-full animate-pulse-slow drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]" strokeWidth={1.5} />
-              <div className="absolute w-[140%] h-[15%] bg-neon-purple/60 blur-[2px] rounded-full rotate-12 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border border-neon-purple/40 shadow-[0_0_10px_#BC13FE]"></div>
-           </div>
-           
            <div>
               <h1 className="text-2xl font-space font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan to-neon-purple">
                  COSMOFOCUS
               </h1>
-              <p className="text-[10px] font-tech tracking-[0.3em] uppercase text-gray-500">FOCO DE ESTELAR</p>
+              <p className="text-[10px] font-tech tracking-[0.3em] uppercase text-gray-500">FOCO ESTELAR</p>
            </div>
         </div>
 
@@ -297,9 +340,6 @@ const App: React.FC = () => {
              className="flex items-center gap-2 bg-space-card border border-neon-purple/30 px-3 py-1 rounded text-neon-purple text-sm font-bold shadow-[0_0_10px_rgba(188,19,254,0.2)] hover:bg-neon-purple/10 transition-colors"
            >
               <BarChart2 size={16} /> Relatório
-           </button>
-           <button className="flex items-center gap-2 bg-space-card border border-gray-700 px-3 py-1 rounded text-gray-400 text-sm hover:text-white transition-colors">
-              <Settings size={16} /> Config
            </button>
         </div>
       </header>
@@ -386,7 +426,7 @@ const App: React.FC = () => {
               variant={mode === TimerMode.POMODORO ? 'cyan' : 'purple'} 
               glow 
               onClick={toggleTimer}
-              className="w-40 text-xl py-4 flex items-center justify-center gap-2"
+              className="w-40 text-xl py-4 flex items-center justify-center gap-2 rounded-xl"
            >
               {isActive ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
               {isActive ? 'PAUSAR' : 'INICIAR'}
@@ -420,7 +460,7 @@ const App: React.FC = () => {
          <div className="bg-space-card/50 border border-gray-800 p-4 rounded-xl flex flex-col items-center">
             <div className="flex items-center gap-2 text-neon-purple mb-1">
                <Flame size={18} fill="currentColor" />
-               <span className="font-tech font-bold uppercase">Ofensiva (Hoje)</span>
+               <span className="font-tech font-bold uppercase">Ofensiva</span>
             </div>
             <span className="text-2xl font-space text-white">{todayStats.pomodorosCompleted} <span className="text-xs text-gray-500">Pomos</span></span>
          </div>
@@ -429,9 +469,10 @@ const App: React.FC = () => {
          <div className="bg-space-card/50 border border-gray-800 p-4 rounded-xl flex flex-col items-center">
             <div className="flex items-center gap-2 text-neon-cyan mb-1">
                <Target size={18} />
-               <span className="font-tech font-bold uppercase">Tarefas (Hoje)</span>
+               <span className="font-tech font-bold uppercase">Tarefas</span>
             </div>
-            <span className="text-2xl font-space text-white">{tasksCountToday}</span>
+            {/* Requirement 2: Show Completed/Total */}
+            <span className="text-2xl font-space text-white">{tasksCountCompleted}/{tasksCountTotal}</span>
          </div>
 
          {/* Focus Time (Completed for Today) (Foco Atual - Minutos) */}

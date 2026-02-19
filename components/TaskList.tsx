@@ -15,6 +15,15 @@ interface TaskListProps {
   onUpdateDuration: (id: string, newDuration: number) => void;
 }
 
+// Local date helper to match App.tsx
+const getToday = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const TaskList: React.FC<TaskListProps> = ({
   tasks,
   activeTaskId,
@@ -31,7 +40,7 @@ export const TaskList: React.FC<TaskListProps> = ({
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [estPomos, setEstPomos] = useState(1);
   const [customDuration, setCustomDuration] = useState(25);
-  const [taskDate, setTaskDate] = useState(new Date().toISOString().split('T')[0]);
+  const [taskDate, setTaskDate] = useState(getToday());
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Derive the active task object
@@ -50,12 +59,12 @@ export const TaskList: React.FC<TaskListProps> = ({
 
     setNewTaskTitle('');
     setEstPomos(1);
-    setTaskDate(new Date().toISOString().split('T')[0]);
+    setTaskDate(getToday());
     setIsAdding(false);
   };
 
   const calculateFinishTime = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
     // Filter for incomplete tasks scheduled for TODAY
     const todaysTasks = tasks.filter(t => !t.isCompleted && t.date === today);
 
@@ -73,21 +82,22 @@ export const TaskList: React.FC<TaskListProps> = ({
     if (totalMinutesRemaining === 0) return null;
 
     const finishDate = new Date(Date.now() + totalMinutesRemaining * 60000);
-    return finishDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Requirement 3: Ensure time is calculated for Brazilian Timezone
+    return finishDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
   };
 
   const finishTime = calculateFinishTime();
 
-  // Helper to format date nicely
+  // Helper to format date nicely in PT-BR
   const formatDateDisplay = (dateStr: string) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
     if (dateStr === today) return 'Hoje';
     const [y, m, d] = dateStr.split('-');
     return `${d}/${m}`;
   };
 
   // Calculate remaining pomos for today only
-  const today = new Date().toISOString().split('T')[0];
+  const today = getToday();
   const remainingPomosToday = tasks
     .filter(t => !t.isCompleted && t.date === today)
     .reduce((acc, t) => acc + Math.max(0, t.estimatedPomos - t.completedPomos), 0);
@@ -167,7 +177,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                           <Clock size={12} />
                           <span>{task.durationPerPomo}m</span>
                         </div>
-                        <div className={`flex items-center gap-1 ${task.date === new Date().toISOString().split('T')[0] ? 'text-neon-cyan' : 'text-gray-500'}`}>
+                        <div className={`flex items-center gap-1 ${task.date === getToday() ? 'text-neon-cyan' : 'text-gray-500'}`}>
                           <Calendar size={12} />
                           <span>{formatDateDisplay(task.date)}</span>
                         </div>
@@ -345,29 +355,50 @@ export const TaskList: React.FC<TaskListProps> = ({
                   <p>Nenhuma tarefa concluída ainda.</p>
                </div>
             ) : (
-               sortedDates.map(date => (
+               sortedDates.map(date => {
+                  const tasksForDate = completedTasksByDate[date];
+                  const totalMinutes = tasksForDate.reduce((acc, t) => acc + (t.completedPomos * t.durationPerPomo), 0);
+                  const hours = Math.floor(totalMinutes / 60);
+                  const mins = totalMinutes % 60;
+                  const timeDisplay = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+                  return (
                   <div key={date}>
-                     <h3 className="text-neon-purple font-space text-lg mb-3 flex items-center gap-2 border-b border-gray-800 pb-1">
-                        <Calendar size={16} />
-                        {formatDateDisplay(date)}
+                     <h3 className="text-neon-purple font-space text-lg mb-3 flex items-center justify-between border-b border-gray-800 pb-1">
+                        <div className="flex items-center gap-2">
+                            <Calendar size={16} />
+                            {formatDateDisplay(date)}
+                        </div>
+                        <span className="text-sm font-tech text-gray-400 font-bold bg-space-900 px-2 py-0.5 rounded border border-gray-800">
+                            {timeDisplay}
+                        </span>
                      </h3>
                      <div className="space-y-2">
-                        {completedTasksByDate[date].map(task => (
-                           <div key={task.id} className="bg-space-card/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between opacity-80 hover:opacity-100 transition-opacity">
+                        {tasksForDate.map(task => (
+                           <div key={task.id} className="bg-space-card/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between opacity-80 hover:opacity-100 transition-opacity group">
                               <div className="flex items-center gap-3">
                                  <div className="bg-neon-cyan/20 p-1 rounded-full">
                                     <Check size={14} className="text-neon-cyan" />
                                  </div>
                                  <span className="text-gray-300 line-through decoration-gray-600">{task.title}</span>
                               </div>
-                              <div className="text-xs text-gray-500 font-bold">
-                                 {task.completedPomos} Pomos
+                              <div className="flex items-center gap-3">
+                                <div className="text-xs text-gray-500 font-bold">
+                                   {task.completedPomos} Pomos
+                                </div>
+                                <button 
+                                    onClick={() => onDeleteTask(task.id)}
+                                    className="text-gray-600 hover:text-red-500 transition-colors p-1"
+                                    title="Excluir do histórico"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
                               </div>
                            </div>
                         ))}
                      </div>
                   </div>
-               ))
+               )})
             )}
          </div>
       )}
