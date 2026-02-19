@@ -69,10 +69,11 @@ const App: React.FC = () => {
   const [showReport, setShowReport] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  const [settings, setSettings] = useStickyState<AppSettings>(DEFAULT_SETTINGS, 'andromeda-settings');
-  const [tasks, setTasks] = useStickyState<Task[]>([], 'andromeda-tasks');
+  // Updated keys to 'cosmofocus-v1' to zero out the system
+  const [settings, setSettings] = useStickyState<AppSettings>(DEFAULT_SETTINGS, 'cosmofocus-settings-v1');
+  const [tasks, setTasks] = useStickyState<Task[]>([], 'cosmofocus-tasks-v1');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-  const [dailyStats, setDailyStats] = useStickyState<DailyStats[]>([], 'andromeda-stats');
+  const [dailyStats, setDailyStats] = useStickyState<DailyStats[]>([], 'cosmofocus-stats-v1');
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
